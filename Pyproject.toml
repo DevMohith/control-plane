@@ -1,0 +1,60 @@
+[project]
+name = "control-plane"
+version = "1.0.0"
+description = "AI Developer Platform usingf Claude, Gemini, Codex modle with MCP  abstractio. and uses RAG as a data pipeline with Knowledge Graph for relationships"
+requires-python = ">=3.11"
+dependencies = [
+    #Core
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.7.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.27.0",
+    "structlog>=24.2.0",
+    # LLM Orchestration
+    "langchain>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "langchain-anthropic>=0.1.0",
+    "langchain-google-genai>=1.0.0",
+    "langgraph>=0.1.0",
+    "litellm>=1.40.0",
+    "openai>=1.30.0",
+    "anthropic>=0.28.0",
+    "google-generativeai>=0.5.0",
+    "weaviate-client>=4.6.0",
+    # Knowledge Graph
+    "neo4j>=5.20.0",
+    # Embeddings (Gemini)
+    "langchain-google-vertexai>=1.0.0",
+    # ETL + Parsing
+    "PyGithub>=2.3.0",
+    "tiktoken>=0.7.0",
+    "numpy>=1.26.0",
+    # Observability
+    "langfuse>=2.36.0",
+    "prometheus-client>=0.20.0",
+    # Testing
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "pinecone>=8.1.2",
+    "fastmcp>=3.2.3",
+]
+
+[project.scripts]
+control-plane-api = "api.main:app"
+control-plane-mcp = "mcp_server.server:app"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "ipython>=8.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
