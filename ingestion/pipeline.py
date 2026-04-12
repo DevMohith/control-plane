@@ -323,15 +323,18 @@ class DevMindPipeline:
 
         log.info("pipeline.chunks_created", count=len(all_chunks))
 
-        batch_size = 5  # reduced from 50
+        batch_size = 3 
         for i in range(0, len(all_chunks), batch_size):
             batch = all_chunks[i:i + batch_size]
             embeddings = embedder.embed_documents([c.content for c in batch])
             self.pinecone.upsert(batch, embeddings)
             for chunk in batch:
                 await self.neo4j.upsert_function(chunk)
-            log.info("pipeline.batch_done", batch=i//batch_size+1, chunks_done=i+len(batch), total=len(all_chunks))
-            time.sleep(2)  # wait 2 seconds between batches to avoid quota
+            log.info("pipeline.batch_done",
+                    batch=i//batch_size+1,
+                    chunks_done=i+len(batch),
+                    total=len(all_chunks))
+            time.sleep(3)
 
         log.info("pipeline.ingest_complete", repo=repo_name, chunks=len(all_chunks))
 

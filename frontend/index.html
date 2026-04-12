@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DevMind — AI Developer Platform</title>
+<title>AI Developer Platform</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -127,19 +127,19 @@ textarea::placeholder { color:var(--muted); }
 <div class="layout">
   <aside class="sidebar">
     <div class="slabel">Platform</div>
-    <div class="sitem active" onclick="setView('chat',this)"><span class="ic">💬</span> AI Chat</div>
-    <div class="sitem" onclick="setView('repo',this)"><span class="ic">🐙</span> Connect Repo</div>
-    <div class="sitem" onclick="setView('upload',this)"><span class="ic">📁</span> Upload Files</div>
-    <div class="sitem" onclick="setView('search',this)"><span class="ic">🔍</span> Search</div>
+    <div class="sitem active" onclick="setView('chat',this)"> - AI Chat</div>
+    <div class="sitem" onclick="setView('repo',this)"> - Connect Repo</div>
+    <div class="sitem" onclick="setView('upload',this)"> - Upload Files</div>
+    <div class="sitem" onclick="setView('search',this)"> - Search</div>
 
     <div class="slabel">Agent Skills</div>
-    <div class="sitem" onclick="setQ('Review this code:\n```python\n\n```')"><span class="ic">👁️</span> Code Review<span class="chip cl">Claude</span></div>
-    <div class="sitem" onclick="setQ('Security scan this code:\n```python\n\n```')"><span class="ic">🔒</span> Security<span class="chip cl">Claude</span></div>
-    <div class="sitem" onclick="setQ('Generate pytest tests for: ')"><span class="ic">🧪</span> Tests<span class="chip gm">Gemini</span></div>
-    <div class="sitem" onclick="setQ('Debug this error: ')"><span class="ic">🐛</span> Debug<span class="chip gm">Gemini</span></div>
-    <div class="sitem" onclick="setQ('Production alert: ')"><span class="ic">🚨</span> Incidents<span class="chip gm">Gemini</span></div>
-    <div class="sitem" onclick="setQ('Write a Python function that ')"><span class="ic">⚡</span> Generate<span class="chip gm">Gemini</span></div>
-    <div class="sitem" onclick="setQ('Explain how ')"><span class="ic">📖</span> Explain<span class="chip gm">Gemini</span></div>
+    <div class="sitem" onclick="setQ('Review this code:\n```python\n\n```')"> Code Review<span class="chip cl">Claude</span></div>
+    <div class="sitem" onclick="setQ('Security scan this code:\n```python\n\n```')"> Security<span class="chip cl">Claude</span></div>
+    <div class="sitem" onclick="setQ('Generate pytest tests for: ')">Tests<span class="chip gm">Gemini</span></div>
+    <div class="sitem" onclick="setQ('Debug this error: ')"> Debug<span class="chip gm">Gemini</span></div>
+    <div class="sitem" onclick="setQ('Production alert: ')"> Incidents<span class="chip gm">Gemini</span></div>
+    <div class="sitem" onclick="setQ('Write a Python function that ')"> Generate<span class="chip gm">Gemini</span></div>
+    <div class="sitem" onclick="setQ('Explain how ')">Explain<span class="chip gm">Gemini</span></div>
   </aside>
 
   <main class="main">
@@ -149,16 +149,16 @@ textarea::placeholder { color:var(--muted); }
         <p>Connect your GitHub repo, upload files, then ask anything about your codebase</p>
         <div class="suggestions">
           <div class="sug" onclick="ask('Review this Python function for bugs and security issues: def get_user(id): return db.query(f\'SELECT * FROM users WHERE id={id}\')')">
-            <div class="si">👁️</div><div class="st">Code Review</div><div class="sd">Find bugs and security issues</div>
+            <div class="st">Code Review</div><div class="sd">Find bugs and security issues</div>
           </div>
           <div class="sug" onclick="ask('Generate pytest tests for an async FastAPI endpoint that handles JWT authentication')">
-            <div class="si">🧪</div><div class="st">Generate Tests</div><div class="sd">Comprehensive test suites</div>
+            <div class="st">Generate Tests</div><div class="sd">Comprehensive test suites</div>
           </div>
           <div class="sug" onclick="ask('Production alert: Redis ConnectionError at localhost:6379. Stack trace: ConnectionRefusedError')">
-            <div class="si">🚨</div><div class="st">Debug Incident</div><div class="sd">Root cause analysis</div>
+            <div class="st">Debug Incident</div><div class="sd">Root cause analysis</div>
           </div>
           <div class="sug" onclick="ask('Security scan: def login(u,p): return db.query(f\'SELECT * FROM users WHERE u={u} AND p={p}\')')">
-            <div class="si">🔒</div><div class="st">Security Scan</div><div class="sd">OWASP Top 10 check</div>
+            <div class="st">Security Scan</div><div class="sd">OWASP Top 10 check</div>
           </div>
         </div>
       </div>

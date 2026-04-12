@@ -1,5 +1,5 @@
 """
-DevMind Orchestrator
+Control Plane Orchestrator
 Routes queries to Claude (code review, security) or Gemini (everything else)
 Claude: ~20% of queries — code review + security only
 Gemini: ~80% of queries — free, fast, good enough
@@ -9,22 +9,21 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from typing import List, Annotated
+from typing import List, Annotated, TypedDict
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 import structlog
 import anthropic
 from google import genai
-from google.genai import types as genai_types
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import HumanMessage, AIMessage
-from typing import TypedDict
-
+from langfuse import get_client, observe
+langfuse = get_client()
 log = structlog.get_logger()
 
-# Clients 
+# ── Clients ───────────────────────────────────────────────────
 claude_client = anthropic.Anthropic(
     api_key=os.getenv("ANTHROPIC_API_KEY")
 )
@@ -34,7 +33,8 @@ gemini_client = genai.Client(
     location=os.getenv("GCP_REGION", "us-central1")
 )
 
-# State
+
+# ── State ─────────────────────────────────────────────────────
 class DevMindState(TypedDict):
     messages: Annotated[List, add_messages]
     query: str
@@ -45,10 +45,10 @@ class DevMindState(TypedDict):
     session_id: str
     tokens_used: int
 
-# Task types that use Claude
+# ── Task types that use Claude ────────────────────────────────
 CLAUDE_TASKS = {"code_review", "security"}
 
-# System prompts
+# ── System prompts ────────────────────────────────────────────
 PROMPTS = {
     "code_review": """You are a senior software engineer doing a thorough code review.
 Check for: bugs, security vulnerabilities (OWASP Top 10), performance issues,
@@ -87,21 +87,23 @@ Be clear, use examples, show short code snippets where helpful.""",
 Be concise, accurate, and practical.""",
 }
 
-# Classifier
+# ── Classifier ────────────────────────────────────────────────
 def classify_task(state: DevMindState) -> DevMindState:
-    q = state["query"].lower()
+    q = state["query"].lower().strip()
 
-    if any(k in q for k in ["review", "bug", "wrong", "fix this", "what's wrong"]):
+    # Debug checked first — debug queries often contain words like "bug" or "wrong"
+    if q.startswith("debug") or any(k in q for k in ["not working", "undefined", "null", "traceback", "stack trace"]):
+        task_type = "debug"
+    elif any(k in q for k in ["review this", "code review", "review my"]):
+        task_type = "code_review"
+    elif any(k in q for k in ["bug", "wrong", "fix this", "what's wrong"]):
         task_type = "code_review"
     elif any(k in q for k in ["security", "vulnerability", "injection",
                                 "xss", "owasp", "secret", "exposed"]):
         task_type = "security"
     elif any(k in q for k in ["test", "unittest", "pytest", "mock", "coverage"]):
         task_type = "test_gen"
-    elif any(k in q for k in ["debug", "why", "not working", "undefined", "null"]):
-        task_type = "debug"
-    elif any(k in q for k in ["incident", "outage", "alert", "stack trace",
-                                "traceback", "error:", "exception:"]):
+    elif any(k in q for k in ["incident", "outage", "alert", "error:", "exception:"]):
         task_type = "incident"
     elif any(k in q for k in ["generate", "create", "write", "implement", "build"]):
         task_type = "code_gen"
@@ -114,7 +116,7 @@ def classify_task(state: DevMindState) -> DevMindState:
     log.info("orchestrator.classified", task=task_type, model=model)
     return {**state, "task_type": task_type, "model_used": model}
 
-# Context retrieval
+# ── Context retrieval ─────────────────────────────────────────
 async def retrieve_context(state: DevMindState) -> DevMindState:
     import httpx
     tool_results = []
@@ -134,7 +136,7 @@ async def retrieve_context(state: DevMindState) -> DevMindState:
 
     return {**state, "tool_results": tool_results}
 
-# Build RAG context string 
+# ── Build RAG context string ──────────────────────────────────
 def build_context(tool_results: List[dict]) -> str:
     if not tool_results:
         return ""
@@ -147,18 +149,16 @@ def build_context(tool_results: List[dict]) -> str:
             parts.append(f"File: {location}\n{content}")
     return "\n".join(parts)
 
-#  Gemini execution 
+# ── Gemini execution ──────────────────────────────────────────
+@observe(name="gemini-generation", as_type="generation")
 async def run_gemini(state: DevMindState) -> DevMindState:
     task_type = state["task_type"]
-
-    # Use 2.5 Flash for complex tasks, 2.0 Flash for simple ones
     complex_tasks = {"test_gen", "debug", "explain"}
     model_name = "gemini-2.5-flash" if task_type in complex_tasks else "gemini-2.0-flash"
-
     system = PROMPTS.get(task_type, PROMPTS["general"])
     context = build_context(state["tool_results"])
     prompt = f"{system}\n{context}\n\nQuery:\n{state['query']}"
-
+ 
     try:
         response = gemini_client.models.generate_content(
             model=model_name,
@@ -167,7 +167,6 @@ async def run_gemini(state: DevMindState) -> DevMindState:
         answer = response.text
     except Exception as e:
         log.error("orchestrator.gemini_error", error=str(e))
-        # Fallback to 2.0 Flash if 2.5 fails
         try:
             response = gemini_client.models.generate_content(
                 model="gemini-2.0-flash",
@@ -177,8 +176,29 @@ async def run_gemini(state: DevMindState) -> DevMindState:
             model_name = "gemini-2.0-flash"
         except Exception as e2:
             answer = f"Gemini error: {str(e2)}"
-
+ 
     tokens = len(prompt.split()) + len(answer.split())
+    log.info("orchestrator.gemini_done", task=task_type, model=model_name, tokens=tokens)
+ 
+    # Update Langfuse with model details and token counts
+    try:
+        langfuse.update_current_generation(
+            model=model_name,
+            input=prompt[:500],
+            output=answer[:500],
+            usage_details={
+                "input": len(prompt.split()),
+                "output": len(answer.split()),
+                "total": tokens
+            },
+            metadata={
+                "task": task_type,
+                "session_id": state["session_id"]
+            }
+        )
+    except Exception:
+        pass
+ 
     return {
         **state,
         "final_response": answer,
@@ -187,13 +207,14 @@ async def run_gemini(state: DevMindState) -> DevMindState:
         "messages": [AIMessage(content=answer)]
     }
 
-# Claude execution
+# ── Claude execution ──────────────────────────────────────────
+@observe(name="claude-generation", as_type="generation")
 async def run_claude(state: DevMindState) -> DevMindState:
     task_type = state["task_type"]
     system = PROMPTS.get(task_type, PROMPTS["general"])
     context = build_context(state["tool_results"])
     user_msg = f"{context}\n\nQuery:\n{state['query']}" if context else state["query"]
-
+ 
     try:
         response = claude_client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -206,9 +227,30 @@ async def run_claude(state: DevMindState) -> DevMindState:
         cost = (response.usage.input_tokens * 1.0 +
                 response.usage.output_tokens * 5.0) / 1_000_000
         log.info("orchestrator.claude_done",
-                 task=task_type,
-                 tokens=tokens,
-                 cost_usd=round(cost, 6))
+                 task=task_type, tokens=tokens, cost_usd=round(cost, 6))
+ 
+        # Update Langfuse with real token counts and cost
+        try:
+            langfuse.update_current_generation(
+                model="claude-haiku-4-5-20251001",
+                input=user_msg[:500],
+                output=answer[:500],
+                usage_details={
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens,
+                    "total": tokens
+                },
+                cost_details={
+                    "total": round(cost, 6)
+                },
+                metadata={
+                    "task": task_type,
+                    "session_id": state["session_id"]
+                }
+            )
+        except Exception:
+            pass
+ 
     except anthropic.AuthenticationError:
         log.warning("orchestrator.claude_fallback_gemini")
         return await run_gemini(state)
@@ -216,7 +258,7 @@ async def run_claude(state: DevMindState) -> DevMindState:
         log.error("orchestrator.claude_error", error=str(e))
         answer = f"Error: {str(e)}"
         tokens = 0
-
+ 
     return {
         **state,
         "final_response": answer,
@@ -225,13 +267,13 @@ async def run_claude(state: DevMindState) -> DevMindState:
         "messages": [AIMessage(content=answer)]
     }
 
-#  Router 
+# ── Router ────────────────────────────────────────────────────
 def route_to_model(state: DevMindState) -> str:
     if state["task_type"] in CLAUDE_TASKS:
         return "run_claude"
     return "run_gemini"
 
-# Build graph
+# ── LangGraph — stateful multi-step pipeline ──────────────────
 def build_graph():
     g = StateGraph(DevMindState)
     g.add_node("classify_task", classify_task)
@@ -251,9 +293,15 @@ def build_graph():
 
 devmind_graph = build_graph()
 
-# Public interface 
+# ── Public interface ──────────────────────────────────────────
+@observe(name="control-plane.query")
 async def run_devmind(query: str, session_id: str = "default") -> dict:
-    from langchain_core.messages import HumanMessage
+    # Set top level trace input
+    try:
+        langfuse.set_current_trace_io(input=query)
+    except Exception:
+        pass
+ 
     result = await devmind_graph.ainvoke({
         "messages": [HumanMessage(content=query)],
         "query": query,
@@ -264,6 +312,17 @@ async def run_devmind(query: str, session_id: str = "default") -> dict:
         "session_id": session_id,
         "tokens_used": 0
     })
+ 
+    # Set trace output and flush
+    try:
+        langfuse.set_current_trace_io(
+            input=query,
+            output=result["final_response"][:500]
+        )
+        langfuse.flush()
+    except Exception:
+        pass
+ 
     return {
         "response": result["final_response"],
         "task_type": result["task_type"],
@@ -273,7 +332,7 @@ async def run_devmind(query: str, session_id: str = "default") -> dict:
         "session_id": session_id
     }
 
-# Quick test
+# ── Quick test ────────────────────────────────────────────────
 if __name__ == "__main__":
     import asyncio
 

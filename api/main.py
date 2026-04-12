@@ -34,20 +34,16 @@ app.add_middleware(
 
 # ── Metrics ───────────────────────────────────────────────────
 # Guard against duplicate registration on reload
-def get_or_create_counter(name, description, labels):
+def get_or_create(metric_class, name, desc, labels=None):
     try:
-        return Counter(name, description, labels)
-    except ValueError:
-        return REGISTRY._names_to_collectors.get(name)
-
-def get_or_create_histogram(name, description):
-    try:
-        return Histogram(name, description)
+        if labels:
+            return metric_class(name, desc, labels)
+        return metric_class(name, desc)
     except ValueError:
         return REGISTRY._names_to_collectors.get(name)
     
-query_counter = get_or_create_counter("devmind_queries_total", "Total queries", ["task_type"])
-query_duration = get_or_create_histogram("devmind_query_duration_seconds", "Query duration")
+query_counter = get_or_create(Counter, "devmind_queries_total", "Total queries", ["task_type"])
+query_duration = get_or_create(Histogram, "devmind_query_duration_seconds", "Query duration")
 
 # ── Models ────────────────────────────────────────────────────
 class QueryRequest(BaseModel):
