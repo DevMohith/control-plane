@@ -60,7 +60,3 @@ gcloud run deploy control-plane --source . --region us-central1 --port 8000 --me
 ```
 
 Secrets are stored in GCP Secret Manager. The Cloud Run service account is granted Secret Manager Secret Accessor role so credentials are injected automatically at container startup with no secrets in the image or repository.
-
-## License
-
-MIT
